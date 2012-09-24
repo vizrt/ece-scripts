@@ -12,6 +12,7 @@ instance_name=
 usage=0
 force=0
 verbosity=0
+ip_command=/sbin/ip
 commands="$(readlink -f "$(dirname $0)")/../share/vizrt/vosa/commands"
 
 function debug() {
@@ -97,6 +98,12 @@ function do_commands() {
   done
 }
 
+
+
+#### helper commands
+
+# Verifies that the installation is sane, and that required
+# directories are there.
 function verify_installation() {
   if [ -z "$available_dir" -o ! -r "$available_dir" ] ; then
     echo "Not initialized! RTFM! Exiting. ($available_dir)"
@@ -109,53 +116,8 @@ function verify_installation() {
   fi
 }
 
-## Lists all roles known to the local machine.
-##
-## More text...
-## TODO:
-function do_list() {
-  verify_installation
-  if [ -z "$instance_dir" ] ; then
-    local a
-    for a in ${available_dir}/* ; do 
-      really_do_status "$a"
-    done
-  else
-    really_do_status $instance_dir
-  fi
-}
-
-
-# argument is the full path to an /etc/vizrt/roles-available.d/filename
-function really_do_status () {
-    local output
-    local done=0
-    local a
-    local avdir="${available_dir}/$(basename $1)"
-    output=( $(basename $1) )
-    if [ ! -d "$avdir" ] ; then
-      done=1
-    fi
-
-    if [ $done -eq 0 ] ; then
-      for a in ${enabled_dir}/*$(basename $1) ; do
-        if [ -L "$a" ] ; then
-          output=( ${output[@]} onboot );
-        else
-          output=( ${output[@]} manual );
-        fi
-      done
-    fi
-
-    if [ $done -eq 0 ] ; then
-      output=( ${output[@]} inactive );
-
-      # TODO: ping it or check the arp cache to see if it's in use.
-    fi
-
-    echo ${output[@]}
-}
-
+# called if a role name argument is required; exits if it isn't
+# specified, or that it doesn't have a role.conf file.
 function requires_role_name() {
   if [ -z "$instance" ] ; then
     echo "Missing role"
@@ -167,31 +129,138 @@ function requires_role_name() {
   fi
 }
 
-## Tells vosa that it is allowed to install and run an instance.
+# Returns 0 or 1 based on the pingability of an IP passed as $1.
+# Might in future use arp table to verify presence of IPs.
+function determine_presence_of() {
+  ping -q -c 1 -w 1 "$1" 2>&1 > /dev/null
+  if [ $? -eq 0 ] ; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# echos the IP address of the hostname passed as $1, suitable for
+# ifconfig up'ing
+function determine_ip_of_hostname() {
+  local ip
+  local hostnames
+  while read ip hostnames
+  do
+    hostnames=( $hostnames )
+    for a in "${hostnames[@]}" ; do
+      if [ "$1" == "$a" ] ; then
+        echo "$ip"
+        return
+      fi
+    done
+  done <<< "$(grep -v ^# /etc/hosts)"
+}
+
+# Prints out the status of a single role, in the form
+# <role-name> <onboot>|<manual> <on>|<off>
+# argument is the name of a directory in /etc/vizrt/roles-available.d/
+function really_do_status () {
+    local output
+    local done=0
+    local a
+    local avdir="${available_dir}/$1"
+    output=( $1 )
+    if [ ! -d "$avdir" ] ; then
+      done=1
+    fi
+
+    if [ $done -eq 0 ] ; then
+      for a in "${enabled_dir}"/*"$1" ; do
+        if [ -L "$a" ] ; then
+          output=( ${output[@]} onboot );
+        else
+          output=( ${output[@]} manual );
+        fi
+      done
+    fi
+
+    if [ $done -eq 0 ] ; then
+      a="$(determine_ip_of_hostname $1)"
+      # TODO: 
+      $ip_command addr list | grep -q "inet $a/"
+      a="${PIPESTATUS[1]}"
+      if [ "$a" == "0" ] ; then
+        output=( ${output[@]} on )
+      else
+        output=( ${output[@]} off )
+      fi
+    fi
+
+    echo ${output[@]}
+}
+
+
+
+### public commands (all start with "do_")
+
+
+## Lists all roles known to the local machine.
+##
+## More text...
+## TODO:
+function do_list() {
+  verify_installation
+  if [ -z "$instance_dir" ] ; then
+    local a
+    for a in ${available_dir}/* ; do 
+      really_do_status "$(basename "$a")"
+    done
+  else
+    really_do_status "$(basename "$instance_dir")"
+  fi
+}
+
+
+## Enables an instance by bringing it up.
 ##
 function do_enable() {
   verify_installation
   requires_role_name
-  # rea the configuratin of the role
   # start the interface using ifup or something
   # TODO: 
   unset INTERFACE
   . "$available_dir/$instance/role.conf"
-  echo "ifconfig $INTERFACE up <ip-of-$instance>"
+  ip="$(determine_ip_of_hostname $instance)"
+  if [ -z "$ip" ] ; then
+    echo "Unable to determine IP for hostname $instance"
+    exit 2
+  fi
+  # Determine if $INTERFACE is already up locally
+  status=( $(really_do_status $instance) )
+  if [ "${status[2]}" == "on" ] ; then
+    echo "$instance is already enabled."
+    exit 0
+  fi
+
+  determine_presence_of $ip
+  if [ "$PIPESTATUS" == 0 ] ; then
+    echo "$instance is already alive somewhere else"
+    exit 2
+  fi
+
+  # actually bring it up
+  ifconfig $INTERFACE up $ip
 }
 
 
 ## Deactivates the network alias if it existed.
 ##
-## vosa deactivate instance
+## rolekeeper deactivate myrole
 function do_disable() {
   verify_installation
-  requires_role_name || exit 2
-  if [ ! -d ${available_dir}/$instance_name ] ; then
-    echo "$instance_name is not an available instance"
-    exit 1
-  fi
-  # TODO: ifconfig $interface down
+  requires_role_name
+  # stop the interface using ifup or something
+  unset INTERFACE
+  . "$available_dir/$instance/role.conf"
+
+  # bring it down
+  ifconfig $INTERFACE down
 }
 
 
