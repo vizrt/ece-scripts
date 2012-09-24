@@ -1,0 +1,567 @@
+#!/bin/bash
+
+# /usr/bin/rolekeeper --- command to add and remove virtual IP address aliases
+# to network cards.
+
+# rolekeeper list --- list roles and their state.
+# rolekeeper enable <role> --- Tries to acquire the virtual IP belonging to a role
+# rolekeeper disable <role> --- releases a virtual IP.
+
+instance_dir=
+instance_name=
+usage=0
+force=0
+debug=0
+
+### To add an option, add it to the optstring, as defined in getopts, in alphabetical order.
+### Also add a function "option-x" where x is the option. $1 will be the option value, if any.
+### set any variables needed to default values as globals first.
+OPTSTRING=":fhd"
+
+function option-f() {
+  force=1
+}
+
+function option-h() {
+  usage=1
+}
+
+function option-d() {
+  debug=$((debug + 1))
+}
+
+function unknown-option() {
+  echo "Unknown option $@"
+  usage=1
+}
+
+### To add a command, simply define a function with a do_ prefix.
+available_dir=$(dirname $0)/../../etc/vizrt/roles-available.d
+available_dir=$(readlink -f ${available_dir})
+enabled_dir=$(dirname $0)/../../etc/vizrt/roles-enabled.d
+enabled_dir=$(readlink -f ${enabled_dir})
+
+## Provides instant gratification.
+function do_help() {
+  cat <<EOF
+$(basename $0) is a command to manage virtual IP addresses of a
+machine.
+
+Useful starting points:
+ - $(basename $0) 
+ - $(basename $0) init
+ - $(basename $0) enable <role>
+ - $(basename $0) disable <role>
+EOF
+}
+
+## Initializes the etc directory with the required directory structure
+##
+## Creates /etc/vizrt/roles-available.d, enabled.d and a skeleton directory
+## with a documented set of files.  The files and directories are not
+## overwritten if they already exist.
+function do_init() {
+  mkdir -p /etc/vizrt/roles-available.d || exit 2
+  mkdir -p /etc/vizrt/roles-enabled.d || exit 2
+}
+
+## Provides even more help.
+function do_longhelp() {
+  cat <<EOF
+$(basename "$0") is a command to manage virtual IP addresses
+
+EOF
+  echo "$0 supports these commands:"
+  declare -F | grep ^"declare -f do_" | cut -d ' ' -f3 | cut -d'_' -f2 | sort | \
+      while read f; do
+    echo -n ' * '$f:  # first line on the same as the command.
+    awk -f $commands/help.awk fn=do_$f < $0
+    echo
+  done
+}
+
+## List detailed information on how to use all the commands.
+function do_commands() {
+  declare -F | grep ^"declare -f do_" | cut -d ' ' -f3 | cut -d'_' -f2 | sort | \
+      while read f; do
+    echo -n ' * '$f:  # first line on the same as the command.
+    awk -f $commands/help.awk fn=do_$f < $0 | head -n 1
+  done
+}
+
+function verify_installation() {
+  if [ -z "$available_dir" -o ! -r "$available_dir" ] ; then
+    echo "Not initialized! RTFM! Exiting. ($available_dir)"
+    exit 2
+  fi
+
+  if [ -z "$enabled_dir" -o ! -r "$enabled_dir" ] ; then
+    echo "Not initialized! RTFM! Exiting. ($enabled_dir)"
+    exit 2
+  fi
+}
+
+## Lists all roles known to the local machine.
+##
+## More text...
+## TODO:
+function do_list() {
+  verify_installation
+  if [ -z "$instance_dir" ] ; then
+    local a
+    for a in ${available_dir}/* ; do 
+      really_do_status $a
+    done
+  else
+    really_do_status $instance_dir
+  fi
+}
+
+
+# argument is the full path to an /etc/vizrt/roles-available.d/filename
+function really_do_status () {
+    local output
+    local done=0
+    local a
+    local avdir="${available_dir}/$(basename $1)"
+    output=( $(basename $1) )
+    if [ ! -d "$avdir" ] ; then
+      done=1
+    fi
+
+    if [ $done -eq 0 ] ; then
+      for a in ${enabled_dir}/*$(basename $1) ; do
+        if [ -L "$a" ] ; then
+          output=( ${output[@]} onboot );
+        else
+          output=( ${output[@]} manual );
+        fi
+      done
+    fi
+
+    if [ $done -eq 0 ] ; then
+      output=( ${output[@]} inactive );
+
+      # TODO: ping it or check the arp cache to see if it's in use.
+    fi
+
+    echo ${output[@]}
+}
+
+## Tells vosa that it is allowed to install and run an instance.
+##
+function do_activate() {
+  requires_instance_dir || return 2
+  # rea the configuratin of the role
+  # start the interface using ifup or something
+  # TODO: 
+}
+
+
+## Tells vosa that it should ignore an instance definition
+##
+## vosa -i <instance> disable
+##     Disables <instance> on this host.
+##
+## vosa will remove the symlink in /etc/vizrt/vosa/enabled.d/
+## pointing to "../available.d/<instance>".  This is all that is
+## required to disable an instance.
+##
+## An disabled instance can not be installed, but may be enabled
+## later.
+function do_disable() {
+  requires_instance_dir && {
+    if [ ! -d ${available_dir}/$instance_name ] ; then
+      echo "$instance_name is not an available instance"
+      exit 1
+    fi
+    if [ ! -L ${enabled_dir}/$instance_name ] ; then
+      echo "$instance_name is not enabled"
+      exit 1
+    fi
+    rm "${enabled_dir}/$instance_name" || exit 1
+    echo "$instance_name has been disabled"
+  }
+}
+
+
+
+## Removes the installed image of an instance
+##
+## This deletes the contents of the directory
+## /var/lib/vizrt/vosa/images/<instance>/ if it exists.
+## An amazon backed instance is terminated and cannot be recovered.
+##
+## Removing the installed image of an instance makes it impossible to
+## start the instance unless it is (re)installed later.  Uninstalling
+## an instance is destructive, but if the directory
+##   /var/backup/vizrt/vosa/
+## exists then ONE generation of backups will be kept in that directory,
+## and it will be possible to restore an old backup by manually moving
+## the backup directory back into /var/lib/vizrt/vosa/images/
+##
+## Amazon EC2 instances will be completely lost, as the instances are
+## terminated, meaning they go away and cannot be revived.
+## If an instance has "termination protection" turned on, then uninstalling
+## this way will not work.  Enable termination protection to make it
+## impossible to accidentally uninstall a valuable image.
+##
+## It is not possible to uninstall an instance that is running, or
+## that _should_ be running (i.e. if a .pid file exists).
+##
+## Please be careful with uninstall.
+function do_destroy() {
+  requires_instance_dir && {
+    # check if the instance is available
+    # check if the instance isn't enabled already
+    # check if the instance isn't forcibly disabled
+    # make a symbolic link
+    if [ ! -d ${available_dir}/$instance_name ] ; then
+      echo "$instance_name is not an available instance"
+      exit 1
+    fi
+    if [ ! -L ${enabled_dir}/$instance_name ] ; then
+      echo "$instance_name is not enabled"
+      exit 1
+    fi
+    local status=( $(really_do_status $instance_dir) )
+    if [ "${status[3]}" == "alive" -o "${status[3]}" == "running" ] ; then
+      echo "$instance_name is alive. Stop it first. Exiting."
+      exit 1
+    fi
+    if [ "${status[3]}" == "dead" ] ; then
+      echo "$instance_name is dead, but supposed to be running. Stop it first. Exiting!"
+      exit 1
+    fi
+    local imgdir=$(readlink -f ${instance_dir}/../../../../../var/lib/vizrt/vosa/images/$instance_name/)
+    local backupdir="/var/backup/vizrt/vosa/$instance_name"
+    local backupparent="/var/backup/vizrt/vosa"
+    if [ $aws -eq 1 ] ; then
+      ${commands}/ec2-cmd.sh \
+        "$instance_dir" \
+        "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" \
+        "terminate-instances" "INSTANCE" || exit $?
+      # If the terminate-instances command fails, don't remove the instance directory
+      # But what if it's terminated twice?
+    fi
+    if [ ! -z "$imgdir" -a -d "$imgdir" ] ; then
+      if [ -w "$backupparent" ] ; then
+        # todo: rotate a few times?
+        rm -rf "$backupdir"
+        mv "$imgdir" "$backupparent"
+      else
+        rm -rf "$imgdir"
+      fi
+    fi
+  }
+}
+
+
+commands="$(readlink -f "$(dirname $0)")/../share/vizrt/vosa/commands"
+
+
+## Installs an image of an instance
+##
+## This creates a disk image and supporting files in the directory
+## /var/lib/vizrt/vosa/images/<instance>/, starts a virtual machine
+## and configures it as described in the instance configuration
+## directory /etc/vizrt/vosa/available.d/<instance>/.
+##
+## Installing an instance usually ends up in a functional virtual
+## machine.
+##
+## It is not possible to install an instance that has already been
+## installed.
+function do_create() {
+  requires_instance_dir && {
+    local status=( $(really_do_status $instance_dir) )
+    if [ "${status[2]}" == "installed" ] ; then
+      echo "$instance_name is already installed. Uninstall before installing."
+      exit 1
+    fi
+    if [ "${status[1]}" != "enabled" ] ; then
+      echo "$instance_name is not enabled, enable it on this host first"
+      exit 1
+    fi
+    if [ $aws -eq 1 ] ; then
+      mkdir "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" || exit 2
+      read_amazon_config $instance_dir/amazon.conf
+      # TODO: sanitize "required" variables
+      ${commands}/ec2-cmd.sh \
+        "$instance_dir" \
+        "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" \
+        run-instances \
+        ${amazon_config_image} \
+        ${amazon_config_availability_zone/#/--availability-zone }  \
+        ${amazon_config_type/#/--instance-type }  \
+        ${amazon_config_ssh_keypair/#/--key }  \
+        ${amazon_config_group[@]/#/--group } \
+        ${amazon_config_user_data/#/--user-data-file } \
+        ${amazon_config_subnet/#/--subnet }
+
+      if [ ! -z "${amazon_config_ip_address}" ] ; then
+        echo "Associating IP $amazon_config_ip_address..."
+        ${commands}/ec2-cmd.sh \
+          "$instance_dir" \
+          "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" \
+          associate-address \
+          ${amazon_config_ip_address} \
+          --instance INSTANCE
+      fi
+      
+      ${commands}/ec2-determine-ip.sh \
+        "$instance_dir" \
+        "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" \
+
+    else 
+      ${commands}/install.sh \
+        "$instance_dir" \
+        "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" \
+         2>&1 |
+         tee /var/log/vosa-install-$instance_name.log
+      local rc=${PIPESTATUS[0]}
+      if [ "$rc" != "0" ] ; then
+        exit $rc
+      fi
+    fi
+  }
+}
+
+## Installs software to a newly provisioned instance
+##
+## All postinst hooks defined in the instance's postinst hook
+## will be run.  It should only be necessary to run this command
+## once, as it should run to completion giving you a completely
+## installed machine.
+##
+## It is possible to postinst an instance that has already been
+## postinst'ed.  It is only possible to postinst an instance
+## that is running.
+function do_install() {
+  requires_instance_dir && {
+    local status=( $(really_do_status $instance_dir) )
+    if [ "${status[2]}" != "installed" ] ; then
+      echo "$instance_name is not installed. Install before running any postinst."
+      exit 1
+    fi
+    if [ "${status[3]}" != "alive" -a "${status[3]}" != "running" ] ; then
+      echo "$instance_name is not alive/running, start it first."
+      exit 1
+    fi
+    ${commands}/postinst.sh \
+      "$instance_dir" \
+      "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" \
+       2>&1 |
+       tee -a /var/log/vosa-postinst-$instance_name.log
+    local rc=${PIPESTATUS[0]}
+    if [ "$rc" != "0" ] ; then
+      exit $rc
+    fi
+  }
+}
+
+## Starts a stopped instance.
+##
+## Starts an installed instance that has been stopped or has died
+## (or has been shut down from within the guest). A pidfile will be
+## created, with the pid of the kvm process, which also serves as a
+## flag that the "desired state" of the VM is to be started.
+##
+## It is not possible to start an instance that has not been installed,
+## or that is already running and alive.  It _is_ possible to (re)start
+## a dead instance.
+function do_start() {
+  # TODO: let's make this command wait for SSH access before returning?
+  requires_instance_dir && {
+    local status=( $(really_do_status $instance_dir) )
+    if [ "${status[3]}" == "alive" -o "${status[3]}" == "running" ] ; then
+      echo "$instance_name is ${status[3]}. No need to start it."
+      exit 1
+    fi
+    if [ "${status[2]}" != "installed" ] ; then
+      echo "$instance_name is not installed, it's ${status[2]}. I can't start it."
+      exit 1
+    fi
+    if [ $aws -eq 1 ] ; then
+      read_amazon_config $instance_dir/amazon.conf
+      ${commands}/ec2-cmd.sh \
+        "$instance_dir" \
+        "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" \
+        "start-instances" INSTANCE
+
+      if [ ! -z "${amazon_config_ip_address}" ] ; then
+        echo "Associating IP $amazon_config_ip_address..."
+        ${commands}/ec2-cmd.sh \
+          "$instance_dir" \
+          "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" \
+          associate-address \
+          ${amazon_config_ip_address} \
+          --instance INSTANCE
+      fi
+
+      # The word INSTANCE is replaced with the instance.
+      ${commands}/ec2-determine-ip.sh \
+        "$instance_dir" \
+        "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name"
+    else
+      ${commands}/boot.sh "$instance_dir" "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" || exit $?
+    fi
+  }
+}
+
+
+## Stops a running instance.
+##
+## Stops an instance that has previously been been started. If the instance
+## has died, the pidfile will be removed to indicate that the desired state
+## is to be stopped.
+##
+## It is not possible to stop an instance that has not been installed. Stopping
+## an already stopped instance has no effect.
+function do_stop() {
+  requires_instance_dir && {
+    local status=( $(really_do_status $instance_dir) )
+    if [ "${status[2]}" != "installed" ] ; then
+      echo "$instance_name is not installed, it's ${status[2]}. I can't stop it."
+      exit 1
+    fi
+    if [ "${status[3]}" == "running" ] ; then
+      shutdown "${status[0]}"
+      # should now be "dead" if we asked it.
+    fi
+    #if [ $aws -eq 0 ] ; then
+      # regardless of this, we _want_ it to die. remove pidfile.
+      # TODO: continue trying to kill it more forcibly, and
+      # remove the pidfile when it's done.
+      #local pidfile=$(echo_rundir_of ${status[0]})/${status[0]}.pid
+      #rm -f $pidfile
+    #fi
+  }
+}
+
+# Performs a graceful shutdown of the guest
+function shutdown_kvm() {
+  local pid=$(<$(echo_rundir_of $1)/$1.pid)
+  if [ -z "$pid" ] ; then
+    return 0
+  fi
+  ps > /dev/null $pid && {
+    echo "Sending ACPI shutdown signal to guest ($pid) ($(echo_rundir_of $1)/$1.monitor)"
+    echo 'system_powerdown' | nc -U $(echo_rundir_of $1)/$1.monitor
+    echo
+    echo -n "Waiting 15 seconds for it to shut down"
+  }
+  local a;
+  for a in $(seq 1 15) ; do
+    echo -n '.'
+    sleep 1
+    ps > /dev/null $pid || {
+      echo;
+      return 0;
+    }
+  done
+  ps > /dev/null $pid && {
+    echo;
+    echo "Sending quit signal to kvm ($(echo_rundir_of $1)/$1.monitor)"
+    echo 'quit' | nc -U $(echo_rundir_of $1)/$1.monitor
+    echo -n "Waiting 30 seconds for it to stop"
+  }
+  local a;
+  for a in $(seq 1 30) ; do
+    echo -n '.'
+    sleep 1
+    ps > /dev/null $pid || {
+      echo;
+      return 0;
+    }
+  done
+  ps > /dev/null $pid && {
+    echo "guest did not shut down.  Killing (like pulling power cord)."
+    kill "${status[4]}"
+    echo -n "Waiting 10 seconds for it to die"
+  }
+  for a in $(seq 1 10) ; do
+    sleep 1
+    ps > /dev/null $pid || {
+      echo;
+      return 0;
+    }
+  done
+  ps > /dev/null $pid && {
+    echo "guest did not respond to kill.  Killing with -9."
+    kill -9 "${status[4]}"
+  }
+}
+
+function shutdown_aws() {
+  ${commands}/ec2-cmd.sh "$instance_dir" "$(dirname $0)/../../var/lib/vizrt/vosa/images/$instance_name" "stop-instances" INSTANCE
+}
+
+# Shuts
+function shutdown() {
+  if [ $aws -eq 1 ] ; then
+    shutdown_aws "${@}"
+  else
+    shutdown_kvm "${@}"
+  fi
+}
+
+
+function unknown-argument() {
+  echo "Unknown argument $@"
+  usage=1
+}
+
+LASTOPTIND=0
+
+function parseopts() {
+local OPTARG
+local OPTIND
+local opt
+local currentconfigdirectory="${@:1:1}"
+shift;
+while getopts "${OPTSTRING}" opt; do
+  case $opt in
+    \?)
+      unknown-option "-$OPTARG"
+      ;;
+    *)
+      option-$opt "${OPTARG}"
+      ;;
+  esac
+done
+
+LASTOPTIND=$OPTIND
+
+}
+
+function verify_usage() {
+  if [ $usage -eq 1 ] ; then
+    echo "Usage: $0 [-i <instance-dir>] <command>"
+    echo "$0 help for more help"
+    exit 1;
+  fi
+}
+
+parseopts "$PWD" "${@}"
+
+# get rid of all parsed parameters from command line, leaving real arguments
+shift $((LASTOPTIND-1))
+
+if [ $usage -eq 0 -a "${#@}" -lt 1 ] ; then
+  echo "A command must be specified."
+  usage=1
+fi
+
+verify_usage
+
+for cmd in "${@}" ; do
+  # Check if the command
+  fn="do_${cmd}"
+  declare > /dev/null -f "$fn" || unknown-argument "$1"
+  declare > /dev/null -f "$fn" && "$fn"
+  verify_usage
+done
+
+
+
