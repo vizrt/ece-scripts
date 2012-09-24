@@ -56,7 +56,7 @@ $(basename $0) is a command to manage virtual IP addresses of a
 machine.
 
 Useful starting points:
- - $(basename $0) 
+ - $(basename $0) list
  - $(basename $0) init
  - $(basename $0) enable <role>
  - $(basename $0) disable <role>
