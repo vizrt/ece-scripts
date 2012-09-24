@@ -7,8 +7,7 @@
 # rolekeeper enable <role> --- Tries to acquire the virtual IP belonging to a role
 # rolekeeper disable <role> --- releases a virtual IP.
 
-instance_dir=
-instance_name=
+instance=
 usage=0
 force=0
 verbosity=0
@@ -200,19 +199,39 @@ function really_do_status () {
 ### public commands (all start with "do_")
 
 
+## Brings up all the interfaces that are set to "onboot"
+##
+## Goes through the list of interfaces listed in
+## /etc/vizrt/roles-enabled.d/ and does the equivalent of an enable on
+## them.
+##
+## The first one to fail will cause the ripple effect of not bringing
+## up the rest of the interfaces; this is to avoid causing problems
+## like deadlocks caused by two machines trying (on boot) to compete
+## for various services, but rather to fail fast(er) if an interface
+## is busy.
+function do_auto() {
+  verify_installation
+  for instance in ${enabled_dir}/* ; do 
+    instance="$(basename "$(readlink -f "$instance")")"
+    echo "enabling $instance"
+    do_enable $instance || exit 2
+  done
+}
+
 ## Lists all roles known to the local machine.
 ##
 ## More text...
 ## TODO:
 function do_list() {
   verify_installation
-  if [ -z "$instance_dir" ] ; then
+  if [ -z "$instance" ] ; then
     local a
     for a in ${available_dir}/* ; do 
       really_do_status "$(basename "$a")"
     done
   else
-    really_do_status "$(basename "$instance_dir")"
+    really_do_status "$instance"
   fi
 }
 
