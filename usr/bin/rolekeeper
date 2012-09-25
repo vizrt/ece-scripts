@@ -3,9 +3,9 @@
 # /usr/bin/rolekeeper --- command to add and remove virtual IP address aliases
 # to network cards.
 
-# rolekeeper list --- list roles and their state.
-# rolekeeper enable <role> --- Tries to acquire the virtual IP belonging to a role
-# rolekeeper disable <role> --- releases a virtual IP.
+# rolekeeper status --- list all of the roles and the current state.
+# rolekeeper enable <role> --- Tries to acquire the virtual IP belonging to a role (run this as root)
+# rolekeeper disable <role> --- releases a virtual IP (run this as root)
 
 instance=
 usage=0
@@ -56,7 +56,7 @@ $(basename $0) is a command to manage virtual IP addresses of a
 machine.
 
 Useful starting points:
- - $(basename $0) list
+ - $(basename $0) status
  - $(basename $0) init
  - $(basename $0) enable <role>
  - $(basename $0) disable <role>
@@ -157,7 +157,7 @@ function determine_ip_of_hostname() {
 }
 
 # Prints out the status of a single role, in the form
-# <role-name> <onboot>|<manual> <on>|<off>
+# <role-name> onboot|manual on|off|unknown
 # argument is the name of a directory in /etc/vizrt/roles-available.d/
 function really_do_status () {
     local output
@@ -181,7 +181,13 @@ function really_do_status () {
 
     if [ $done -eq 0 ] ; then
       a="$(determine_ip_of_hostname $1)"
-      # TODO: 
+      if [ -z "$a" ] ; then
+        output=( ${output[@]} unknown_host )
+        done=1
+      fi
+    fi
+
+    if [ $done -eq 0 ] ; then
       $ip_command addr list | grep -q "inet $a/"
       a="${PIPESTATUS[1]}"
       if [ "$a" == "0" ] ; then
@@ -219,11 +225,32 @@ function do_auto() {
   done
 }
 
-## Lists all roles known to the local machine.
+## Shows the status of all the roles known to the local machine.
 ##
-## More text...
-## TODO:
-function do_list() {
+##   rolekeeper status
+##
+## For all defined roles, i.e. each directory in
+## /etc/vizrt/roles-available.d, the status of each role is printed,
+## in the following form:
+##
+##    <role-name>  <initial-state>  <current-state>
+##
+## where
+## - <role-name> is the name of the role, also the hostname of the role.
+## - <boot-state> is either "onboot" or "manual".  "onboot" means that
+##   the role should be acquired when the machine boots, whereas
+##   "manual" indicates that it should _not_ be acquired upon boot, but
+##   rather through operator intervention.
+## - <current-state> is either "on", "off" or "unknown_host":  "on"
+##   indicates that the machine currently plays this role, effectively
+##   the IP address of the role is assigned to the local machine; "off"
+##   indicates that the role is _not_ being played by the local machine;
+##   "unknown_host" means that the role name could not be resolved to an
+##   IP, so is invalid.
+##
+## Example output:
+##    edit
+function do_status() {
   verify_installation
   if [ -z "$instance" ] ; then
     local a
