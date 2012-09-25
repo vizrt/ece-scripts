@@ -69,8 +69,8 @@ EOF
 ## with a documented set of files.  The files and directories are not
 ## overwritten if they already exist.
 function do_init() {
-  mkdir -p /etc/vizrt/roles-available.d || exit 2
-  mkdir -p /etc/vizrt/roles-enabled.d || exit 2
+  mkdir -v -p /etc/vizrt/roles-available.d || exit 2
+  mkdir -v -p /etc/vizrt/roles-enabled.d || exit 2
 }
 
 ## Provides even more help.
@@ -191,7 +191,7 @@ function really_do_status () {
       fi
     fi
 
-    echo ${output[@]}
+    echo "${output[@]}"
 }
 
 
@@ -227,8 +227,10 @@ function do_list() {
   verify_installation
   if [ -z "$instance" ] ; then
     local a
-    for a in ${available_dir}/* ; do 
-      really_do_status "$(basename "$a")"
+    for a in ${available_dir}/* ; do
+      if [ -d "$a" ] ; then
+        really_do_status "$(basename "$a")"
+      fi
     done
   else
     really_do_status "$instance"
