@@ -163,6 +163,8 @@ function really_do_status () {
     local output
     local done=0
     local a
+    local b
+    local boot
     local avdir="${available_dir}/$1"
     output=( $1 )
     if [ ! -d "$avdir" ] ; then
@@ -170,13 +172,21 @@ function really_do_status () {
     fi
 
     if [ $done -eq 0 ] ; then
-      for a in "${enabled_dir}"/*"$1" ; do
+      boot=0
+      for a in "${enabled_dir}"/* ; do
         if [ -L "$a" ] ; then
-          output=( ${output[@]} onboot );
-        else
-          output=( ${output[@]} manual );
+          b=$(readlink -f $a)
+          b=$(basename $b)
+          if [ "$b" == "$1" ] ; then
+            boot=1
+          fi
         fi
       done
+      if [ "$boot" == "1" ] ; then
+        output=( ${output[@]} onboot );
+      else
+        output=( ${output[@]} manual );
+      fi
     fi
 
     if [ $done -eq 0 ] ; then
