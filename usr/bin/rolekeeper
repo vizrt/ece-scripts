@@ -303,7 +303,7 @@ function do_enable() {
   fi
 
   # actually bring it up
-  ifconfig $INTERFACE up $ip
+  ifconfig $INTERFACE $ip
 }
 
 
