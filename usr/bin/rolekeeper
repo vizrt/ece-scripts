@@ -283,6 +283,7 @@ function do_enable() {
   # start the interface using ifup or something
   # TODO: 
   unset INTERFACE
+  unset NETMASK
   . "$available_dir/$instance/role.conf"
   ip="$(determine_ip_of_hostname $instance)"
   if [ -z "$ip" ] ; then
@@ -303,7 +304,7 @@ function do_enable() {
   fi
 
   # actually bring it up
-  ifconfig $INTERFACE $ip
+  ifconfig $INTERFACE $ip ${NETMASK:+netmask} ${NETMASK}
 }
 
 
