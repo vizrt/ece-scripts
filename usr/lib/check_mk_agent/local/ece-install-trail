@@ -11,8 +11,8 @@
 # trail_presentation_port=1234
 # trail_editorial_port=1235
 
-critical=400
-warning=250
+critical=900
+warning=700
 
 function check_trail() {
   for el in /var/lib/ece-install/*.trail ; do
