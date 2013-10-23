@@ -49,7 +49,9 @@ job_name=""
 log_base_dir=/var/log/escenic
 ece_scripts_version="straight-from-github"
 
+## log should be per publication
 log=$log_base_dir/$(basename $0).log
+
 nursery_base_dir=/etc/escenic/engine/common
 publication_name=""
 raw_spool_base_dir=/var/spool/escenic/raw
@@ -115,6 +117,7 @@ function get_user_input() {
       next_is_name=0
     elif [ $next_is_publication -eq 1 ]; then
       publication_name=$el
+      log="${log_base_dir}/$(basename $0)-${publication_name}.log"
       next_is_publication=0
     elif [ $next_is_import_archive -eq 1 ]; then
       import_archive=$el
@@ -358,8 +361,8 @@ assert_commands_available xsltproc xmllint xml_grep
 get_user_input $@
 
 function run_import() {
-  pid_file=${pid_file/%.pid/-run-import.pid}
-  lock_file=${lock_file/%.lock/-run-import.lock}
+  pid_file=${pid_file/%.pid/-run-import-${publication_name}.pid}
+  lock_file=${lock_file/%.lock/-run-import-${publication_name}.lock}
   common_pre_run
 
   verify_import_job_configuration
@@ -385,8 +388,8 @@ function run_create_import_configuration() {
 }
 
 function run_download_raw_data() {
-  pid_file=${pid_file/%.pid/-download.pid}
-  lock_file=${lock_file/%.lock/-download.lock}
+  pid_file=${pid_file/%.pid/-download-${publication_name}.pid}
+  lock_file=${lock_file/%.lock/-download-${publication_name}.lock}
 
   common_pre_run
   verify_import_job_configuration
