@@ -1,0 +1,31 @@
+#!/bin/bash
+
+sites="localhost"
+tomcat_port=8040
+newline="
+"
+this_script=$(basename $0)
+
+function init {
+  . "$(dirname $0)/../main.conf"
+  if [ -f "$(dirname $0)/../conf/$this_script.conf" ]; then
+    . "$(dirname $0)/../conf/$this_script.conf"
+  fi
+}
+
+init
+
+for line in $sites; do
+  before=$(date +"%s.%N")
+  size=$(curl -s http://localhost:$tomcat_port -H "Host:$line"| wc -c)
+  after=$(date +"%s.%N")
+  time_took=$(echo "$after - $before"| bc | cut -c -5)
+  oneline=$(echo "$line $size $time_took")
+  if [ "$all_lines" == "" ]; then
+    all_lines="$oneline"
+  else
+    all_lines="$all_lines$newline$oneline"
+  fi
+done
+
+echo "$all_lines" > "$nagios_data_file"

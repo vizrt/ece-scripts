@@ -1,0 +1,4 @@
+MAILTO=root
+
+* * * * *     nagios if [ -x /usr/lib/periodic-check/main ]; then /usr/lib/periodic-check/main; fi
+

@@ -1,0 +1,26 @@
+def inventory_site_length_status(checkname, info):
+   inventory = []
+   for line in info:
+      munin_name = line[0]   # open_files
+      munin_var = line[1]    # used
+      inventory.append( (munin_name, "", None) )
+   return inventory
+
+def check_site_length_status(item, params, info):
+   for line in info:
+      if line[0] == item:
+         state = "OK"
+   numeric=0
+   length=int(line[1])
+   time=line[2]
+   if length < 10000:
+      numeric = 2
+      state = "Critical"
+   else:
+      numeric = 0
+   return (numeric, "{s}. Downloaded {b} bytes in {c} sec from {a}.".format(s=state, a=item, b=length, c=time))
+
+# declare the check to Check_MK
+check_info['site_length.status'] = \
+      (check_site_length_status, "page_size", 0, inventory_site_length_status)
+
