@@ -1,18 +1,17 @@
 def inventory_site_length_status(checkname, info):
    inventory = []
    for line in info:
-      munin_name = line[0]   # open_files
-      munin_var = line[1]    # used
-      inventory.append( (munin_name, "", None) )
+      site_name = line[0]   # open_files
+      inventory.append( (site_name, "", None) )
    return inventory
 
 def check_site_length_status(item, params, info):
    for line in info:
       if line[0] == item:
          state = "OK"
+         length=int(line[1])
+         time=line[2]
    numeric=0
-   length=int(line[1])
-   time=line[2]
    if length < 10000:
       numeric = 2
       state = "Critical"
