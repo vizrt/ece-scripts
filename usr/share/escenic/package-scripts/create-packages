@@ -226,7 +226,7 @@ function set_up_escenic-common-scripts() {
 }
 
 function set_up_escenic-check-mk-server-plugins() {
-  mkdir_dir $target_dir/usr/share/check_mk/checks
+  make_dir $target_dir/usr/share/check_mk/checks
   run cp -r ../../../share/check_mk/checks/* \
     $target_dir/usr/share/check_mk/checks/
 }
