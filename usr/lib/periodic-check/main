@@ -1,5 +1,4 @@
 #!/bin/bash
-
 . $(dirname $0)/main.conf
 
 function init {

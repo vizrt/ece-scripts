@@ -1,0 +1,13 @@
+#!/bin/bash
+
+dir="/var/cache/periodic-check"
+
+#echo "<<<periodic-check>>>"
+
+for file in `ls $dir`; do
+# echo "hello: $dir/$file"
+  if [ -f "$dir/$file" ]; then
+    echo "<<<$file>>>"
+    cat "$dir/$file"
+  fi
+done
