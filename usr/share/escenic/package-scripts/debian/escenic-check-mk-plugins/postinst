@@ -1,4 +1,10 @@
 #! /usr/bin/env bash
 
+if ! getent passwd hugin >/dev/null; then
+  adduser --group --system --no-create-home --home /var/lib/nagios nagios
+fi
+
+chown -R nagios:nagios /var/cache/periodic-check
+
 exit 0
 
