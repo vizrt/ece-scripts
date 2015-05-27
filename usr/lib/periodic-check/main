@@ -1,0 +1,23 @@
+#!/bin/bash
+
+. $(dirname $0)/main.conf
+
+function init {
+ if [ -f "$state_file" ]; then
+   old_pid=$(cat $state_file)
+   if ps &> /dev/null $old_pid ; then
+     exit
+   fi
+ fi
+ echo "$$" > "$state_file"
+}
+
+init
+
+for script in `ls $nagios_lib_dir/script/`; do
+  if [ -f "$nagios_lib_dir/script/$script" -a -x "$nagios_lib_dir/script/$script" ]; then
+    $nagios_lib_dir/script/$script
+  fi
+done
+
+rm "$state_file"

@@ -225,10 +225,21 @@ function set_up_escenic-common-scripts() {
   run cp -r ../../../bin/sync-network-drive $target_dir/usr/bin/
 }
 
+function set_up_escenic-check-mk() {
+  mkdir_dir $target_dir/usr/share/check_mk
+  run cp -r ../../../../usr/share/check_mk/* \
+    $target_dir/usr/share/check_mk/
+}
+
 function set_up_escenic-check-mk-plugins() {
   make_dir $target_dir/usr/lib/check_mk_agent/local
+  make_dir $target_dir/etc/cron.d $target_dir/usr/lib/periodic-check $target_dir/var/cache/periodic-check
   run cp -r ../../../lib/check_mk_agent/local/* \
     $target_dir/usr/lib/check_mk_agent/local/
+  run cp -r ../../../lib/periodic-check/* \
+    $target_dir/usr/lib/periodic-check/
+  run cp  ../../../../etc/cron.d/periodic-check \
+    $target_dir/etc/cron.d/periodic-check
 }
 
 function set_up_escenic-munin-plugins() {
