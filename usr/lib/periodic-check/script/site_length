@@ -16,11 +16,15 @@ function init {
 init
 
 for line in $sites; do
+  epoch=$(date +"%s")
   before=$(date +"%s.%N")
   size=$(curl -s http://localhost:$tomcat_port -H "Host:$line"| wc -c)
   after=$(date +"%s.%N")
+  if [ "$size" == "" ]; then 
+    size="0"
+  fi
   time_took=$(echo "$after - $before"| bc | cut -c -5)
-  oneline=$(echo "$line $size $time_took")
+  oneline=$(echo "$epoch $line $size $time_took")
   if [ "$all_lines" == "" ]; then
     all_lines="$oneline"
   else

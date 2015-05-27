@@ -1,1 +1,4 @@
-sites="www.escenic.com"
+sites="www.escenic.com
+www.escenic.com/incoming"
+tomcat_port="8040"
+host=localhost
