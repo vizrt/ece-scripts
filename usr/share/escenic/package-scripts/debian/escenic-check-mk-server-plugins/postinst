@@ -1,4 +1,12 @@
 #! /usr/bin/env bash
 
+check_mk -II
+sleep 2
+check_mk -OO
+sleep 2
+service icinga restart
+service icinga reload
+
+
 exit 0
 
