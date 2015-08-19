@@ -1,57 +1,7 @@
-========
-Note!
-========
-This version of ece-scripts is currently being modified to support java7, tomcat7 and content engine 5.6. During this transition the latest version of ece-scripts will not work correctly for previously released engine versions.
+==========================
+This repo/fork is obsolete
+==========================
 
+Current development of ece-scripts is at:
+https://github.com/escenic/ece-scripts
 
-========
-Overview
-========
-These are scripts to help template developers and administrators
-manage various components of the Escenic Content Engine. The scripts
-are experimental and not yet a part of the official distribution of
-Escenic Content Engine from Vizrt Online.
-
-========================
-Project directory layout
-========================
-The file structure ressembles where you'd typically put the various
-scripts and configuration files. That's all it is, only for
-documentational purposes :-)
-
-===================================
-Features of the /usr/bin/ece script
-===================================
-https://github.com/vizrt/ece-scripts/blob/master/usr/share/doc/escenic/ece-guide.org
-
-===================================
-Features of the /usr/bin/ece-import script
-===================================
-https://github.com/vizrt/ece-scripts/blob/master/usr/share/doc/escenic/ece-import-guide.org
-
-============================================
-Features of the /usr/sbin/ece-install script
-============================================
-https://github.com/vizrt/ece-scripts/blob/master/usr/share/doc/escenic/ece-install-guide.org
-
-===========================================
-Features of the /usr/bin/system-info script
-===========================================
-https://github.com/vizrt/ece-scripts/blob/master/usr/share/doc/escenic/system-info-guide.org
-
-====================================
-Features of the /usr/bin/vosa script
-====================================
-https://github.com/vizrt/ece-scripts/blob/master/usr/share/doc/vizrt/vosa-guide.org
-
-========
-Feedback
-========
-Hope you enjoy the ece /usr/bin and intit.d scripts. All feedback,
-come hither!
-
-Escenic Support support(at)escenic.com
-
-(The founder of this repo , Torstein, has move(d) on to other challenges)
-
-Commits to this repo will also show in our vosa hipchat room
